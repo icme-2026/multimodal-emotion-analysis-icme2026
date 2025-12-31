@@ -1,0 +1,25 @@
+.idea/
+.vscode/
+__pycache__/
+*.py[cod]
+*.log
+*.ckpt
+*.pth
+*.pt
+*.npz
+*.npy
+.ipynb_checkpoints/
+.DS_Store
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local datasets (examples)
+datasets/*/train/
+datasets/*/val/
+datasets/*/test/
+
+# Local files
+framework].pdf

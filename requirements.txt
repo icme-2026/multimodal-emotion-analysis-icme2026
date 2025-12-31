@@ -1,0 +1,12 @@
+torch==1.11.0+cu113
+torchtext==0.12.0
+torchvision==0.12.2+cu113
+tqdm==4.61.2
+transformers==4.19.2
+numpy==1.22.4
+pandas==2.0.3
+scikit-learn==1.0.2
+timm
+tensorboardX
+pyyaml
+Pillow
