@@ -15,7 +15,6 @@ import random
 import gc
 from collections import Counter
 
-# 防止图片截断报错
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # ==============================================================================

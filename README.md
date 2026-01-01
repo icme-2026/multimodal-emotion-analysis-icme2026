@@ -21,7 +21,7 @@ pip install -r requirements.txt
 We evaluate on three mainstream image-text sentiment datasets: MVSA-Single, MVSA-Multiple, and Twitter (merged from Twitter-15/17).
 
 
-1. For the relabeled MVSA dataset, please download from [here](https://pan.baidu.com/s/14HxGf1xwUhuOmGOJAN-iDA?pwd=3yzs) and update the `train_data_dir` and `test_data_dir`.
+1.For the relabeled MVSA dataset, please request access from the corresponding authors of the original MVSA dataset, and preprocess it according to the format specified in the data directory and train.json template. 
 2. For the Twitter datasets, please refer to the original paper. After obtaining them, preprocess the data according to the format in the `data` and `train.json` files of the relabeled MVSA dataset.
 
 ## Training (Example: MVSA-Single, 51 labels)

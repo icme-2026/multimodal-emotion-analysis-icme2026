@@ -18,9 +18,7 @@ from models.main.main import S2_VER
 from datasets.ssl_dataset import SSL_Dataset, ImageNetLoader, Emotion_SSL_Dataset
 from datasets.data_utils import get_data_loader
 
-'''
-FI数据集与cifar10的切换: net部分，调整stride；数据集部分，SSL/EmotionSSL
-'''
+
 
 # os.environ['CUDA_VISIBLE_DEVICES'] = "0" 
 

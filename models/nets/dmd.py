@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 DMD backbone (feature decoupling + multimodal attention)
-- Safe shapes when batch_size == 1
-- Expose modal_logits for soft gating in main.py
 """
 
 import os
@@ -75,8 +73,8 @@ class DMD(nn.Module):
     def __init__(self, args):
         super(DMD, self).__init__()
 
-        # -------- Text encoder (BERT, local only) --------
-        _here = os.path.dirname(__file__)  # .../models/nets
+        # -------- Text encoder --------
+        _here = os.path.dirname(__file__)
         _default_bert_dir = os.path.abspath(os.path.join(_here, '..', 'bert-base-uncased'))
         bert_dir = os.environ.get('HF_BERT_DIR', _default_bert_dir)
         try:
@@ -87,7 +85,7 @@ class DMD(nn.Module):
                 f"Ensure it contains config.json + (pytorch_model.bin|model.safetensors) + vocab.txt"
             ) from e
 
-        # -------- Vision backbone (ResNet18, random init OK) --------
+        # -------- Vision backbone --------
         try:
             self.visual_model = models.resnet18(weights=None)  # torchvision>=0.13
         except Exception:

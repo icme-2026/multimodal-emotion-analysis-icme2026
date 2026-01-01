@@ -19,7 +19,7 @@ from train_utils import AverageMeter
 from .main_utils import Get_Scalar, LinearWarmupScalar
 from train_utils import ce_loss, wd_loss, EMA, Bn_Controller, MultiClassFocalLossWithAlpha
 
-# 显式导入常用指标
+
 from sklearn.metrics import accuracy_score, top_k_accuracy_score, f1_score
 
 from models.nets import fusion_model, dmd
@@ -60,7 +60,6 @@ class HingeLoss(nn.Module):
 
         cosine = self.compute_cosine(s, t)  # B**2
 
-        # 等号 mask 放在同一 device 上，避免 GPU/CPU mismatch
         equal_mask = torch.eye(B, dtype=torch.bool, device=feats.device)
         s_ids = s_ids[~equal_mask].view(B, B - 1)  # B x (B-1)
         t_ids = t_ids[~equal_mask].view(B, B - 1)  # B x (B-1)
@@ -102,7 +101,7 @@ class S2_VER:
         self.num_classes = int(num_classes)
         self.ema_m = ema_m
 
-        # 模型
+        # model
         self.model = dmd.DMD(args)
         self.ema_model = None
         self.ema = None
@@ -123,7 +122,6 @@ class S2_VER:
             os.makedirs(self._motivation_dir, exist_ok=True)
             self._motivation_csv_path = os.path.join(self._motivation_dir, "records.csv")
 
-        # 温度 / 阈值的调度函数：默认是常数，也可以在外部传自定义 schedule
         self.t_fn = t_fn if t_fn is not None else Get_Scalar(T)
         self.p_fn = p_fn if p_fn is not None else Get_Scalar(p_cutoff)
 
@@ -144,12 +142,11 @@ class S2_VER:
 
         self.bn_controller = Bn_Controller()
 
-        # 一致性加权的下限（可通过 args.consistency_floor 控制，默认 0，不影响旧配置）
         self.consistency_floor = float(getattr(args, "consistency_floor", 0.0)) if args is not None else 0.0
-        # teacher warmup：允许前若干个 epoch 直接使用学生伪标签，减轻冷启动不稳定
+        # teacher warmup
         self.teacher_warmup_epochs = max(0, int(getattr(args, "teacher_warmup_epochs", 0))) if args is not None else 0
 
-        # --- 本地 tokenizer（离线环境） ---
+        # tokenizer
         _here = os.path.dirname(__file__)                # .../models/main
         _default_bert_dir = os.path.abspath(os.path.join(_here, '..', 'bert-base-uncased'))
         bert_dir = os.environ.get('HF_BERT_DIR', _default_bert_dir)
@@ -171,9 +168,7 @@ class S2_VER:
         self.scheduler = scheduler
 
     def _texts_to_list(self, texts):
-        """
-        把 batch 文本统一成 list[str]，兼容 str / Tensor scalar / numpy scalar 等。
-        """
+
         out = []
         for t in texts:
             if isinstance(t, str):
@@ -217,19 +212,15 @@ class S2_VER:
         scaler = GradScaler(enabled=args.amp)
         amp_cm = autocast if args.amp else contextlib.nullcontext
 
-        # 若从 checkpoint 恢复，可先评估一次
         if args.resume is True:
             eval_dict = self.evaluate(args=args)
             self.print_fn(eval_dict)
 
-        # 训练总迭代数，用于课程化阈值和 λ_u ramp-up
         total_iters = max(1, int(args.epoch * len(self.loader_dict['train_ulb'])))
 
-        # 无监督 ramp-up 时长占总迭代的比例（可通过 args.ulb_rampup_ratio 控制，默认 0.1）
         ulb_rampup_ratio = getattr(args, "ulb_rampup_ratio", 0.1)
         ulb_rampup_iters = max(1, int(ulb_rampup_ratio * total_iters))
 
-        # 伪标签阈值 ramp-up：若用户提供 p_cutoff_end，则默认线性升至目标
         p_cutoff_end = getattr(args, "p_cutoff_end", None)
         p_rampup_ratio = getattr(args, "p_rampup_ratio", 0.2)
         p_rampup_iters = max(1, int(p_rampup_ratio * total_iters)) if p_cutoff_end is not None else 1
@@ -238,7 +229,6 @@ class S2_VER:
             start_cutoff = float(self.p_fn(0))
             p_scheduler = LinearWarmupScalar(start_cutoff, p_cutoff_end, p_rampup_iters)
 
-        # 早期过滤的最小阈值 & 启动 epoch
         label_filter_floor = float(getattr(args, "label_filter_min", 0.8))
         gate_clean_start = int(getattr(args, "gate_clean_start", 5))
 
@@ -249,7 +239,7 @@ class S2_VER:
             # labeled batch
             _, x_lb, t_lb, y_lb = lb_batch
 
-            # unlabeled batch，支持没有 y_ulb 的情况
+            # unlabeled batch
             if len(ulb_batch) >= 6:
                 x_ulb_idx, x_ulb_w, x_ulb_s0, x_ulb_s1, t_ulb, y_ulb = ulb_batch[:6]
             else:
@@ -278,7 +268,6 @@ class S2_VER:
 
             img_inputs = torch.cat((x_lb, x_ulb_w, x_ulb_s0, x_ulb_s1))
 
-            # ---- 文本批次：直接作为字符串列表传 tokenizer ----
             t_lb_list = self._texts_to_list(t_lb)
             t_ulb_list = self._texts_to_list(t_ulb)
             text_input_list = t_lb_list + t_ulb_list + t_ulb_list + t_ulb_list
@@ -291,10 +280,10 @@ class S2_VER:
                 logits_t = output['pre_t']
                 logits_v = output['pre_v']
 
-                # 公共特征
+                # Shared features
                 features_m = output['c_l'] + output['c_v']
 
-                # 切分 labeled / unlabeled
+                #labeled / unlabeled
                 logits_x_lb = logits_m[:num_lb]
                 logits_t_lb = logits_t[:num_lb]
                 logits_v_lb = logits_v[:num_lb]
@@ -306,10 +295,8 @@ class S2_VER:
                 features_lb = features_m[:num_lb]
                 features_ulb_w, features_ulb_s0, features_ulb_s1 = torch.split(features_m[num_lb:], num_ulb)
 
-                # 监督损失（融合头）
                 sup_loss = ce_loss(logits_x_lb, y_lb, reduction='mean')
 
-                # 用混模输出辅助筛选（早期）
                 pre_v_in_m = output['pre_v_in_m'][:num_lb]
                 pre_t_in_m = output['pre_t_in_m'][:num_lb]
                 sup_loss_scalar = float(sup_loss.detach().cpu().item())
@@ -333,7 +320,6 @@ class S2_VER:
                         t_sup_loss = ce_loss(logits_t_lb[select_t], y_lb[select_t], reduction='mean')
                     sup_loss = sup_loss + v_sup_loss + t_sup_loss
 
-                # 兼容 soft gate（modal_logits）与旧 modal_index
                 modal_logits = output.get('modal_logits', None)
                 if modal_logits is not None:
                     modal_gates = torch.softmax(modal_logits, dim=1)  # (B,3)
@@ -343,18 +329,16 @@ class S2_VER:
                     modal_index_ulb_w, _, _ = torch.split(modal_index[num_lb:], num_ulb)
                     modal_gates_ulb_w = F.one_hot(modal_index_ulb_w, num_classes=3).float()
 
-                # 交叉验证辅助项（来自混模在各模态头的预测）
                 pre_m_in_t = output['pre_m_in_t']
                 pre_m_in_t, _, _ = torch.split(pre_m_in_t[num_lb:], num_ulb)
                 pre_m_in_v = output['pre_m_in_v']
                 pre_m_in_v, _, _ = torch.split(pre_m_in_v[num_lb:], num_ulb)
 
                 with torch.no_grad():
-                    # ===== 温度 / 阈值课程化：统一用 t_fn / p_fn =====
                     T_now = float(self.t_fn(self.it))
                     p_now = float(p_scheduler(self.it))
 
-                    # === EMA Teacher 产生 ulb_w 的伪标签 ===
+                    # EMA Teacher
                     use_teacher = self._should_use_teacher(epoch)
                     if use_teacher:
                         x_ulb_w_imgs = img_inputs[num_lb:num_lb + num_ulb]
@@ -382,7 +366,7 @@ class S2_VER:
                     pre_m_in_t = pre_m_in_t.detach()
                     pre_m_in_v = pre_m_in_v.detach()
 
-                    # 带温度的 softmax
+                    # softmax
                     ulb_probs = torch.softmax(logits_x_ulb_w / max(T_now, 1e-6), dim=1)
                     t_ulb_probs = torch.softmax(logits_t_ulb_w / max(T_now, 1e-6), dim=1)
                     v_ulb_probs = torch.softmax(logits_v_ulb_w / max(T_now, 1e-6), dim=1)
@@ -391,7 +375,6 @@ class S2_VER:
                     t_scores, t_lbs_u_guess = torch.max(t_ulb_probs, dim=1)
                     v_scores, v_lbs_u_guess = torch.max(v_ulb_probs, dim=1)
 
-                    # 早期小清洗：仅当“common 模态门控占优”时做互验证
                     if self.enable_cpl and (gate_clean_start <= epoch <= 10):
                         gate_tau = getattr(args, 'dynamic_th', 0.4)
                         gate_filter_threshold = torch.tensor(
@@ -407,7 +390,6 @@ class S2_VER:
                                 if (loss_m_in_t > gate_filter_threshold) or (loss_m_in_v > gate_filter_threshold):
                                     scores[i] = 0.0  # 过滤该样本
 
-                    # 动态阈值：来自 p_fn，而不是手写 0.85+0.13*progress
                     if self.enable_cpl:
                         threshold = p_now
                     else:
@@ -422,7 +404,6 @@ class S2_VER:
                         pseudo_acc = ((lbs_u_guess == y_ulb).float() * mask_float).sum() / denom
                         pseudo_true_ratios.update(pseudo_acc.detach().cpu())
 
-                # === 置信度加权 & 一致性加权 ===
                 if self.enable_mco:
                     w_m = (scores * mask.float()).detach()
                     w_t = (t_scores * t_mask.float()).detach()
@@ -432,7 +413,7 @@ class S2_VER:
                     w_t = t_mask.float().detach()
                     w_v = v_mask.float().detach()
 
-                # 图文一致性（越一致权重越高）
+                #Vision–language consistency
                 with torch.no_grad():
                     cons = (t_ulb_probs * v_ulb_probs).sum(dim=1).detach()  # [B] in [0,1]
                 if self.enable_mco:
@@ -467,7 +448,7 @@ class S2_VER:
                     use_teacher=use_teacher,
                 )
 
-                # 无监督损失（加权）
+                #Unsupervised loss (weighted).
                 unsup_loss_m = (F.cross_entropy(logits_x_ulb_s0, lbs_u_guess, reduction='none') * w_m)
                 unsup_loss_t = (F.cross_entropy(logits_t_ulb_s0, t_lbs_u_guess, reduction='none') * w_t)
                 unsup_loss_v = (F.cross_entropy(logits_v_ulb_s0, v_lbs_u_guess, reduction='none') * w_v)
@@ -504,7 +485,7 @@ class S2_VER:
                         ids.append(y_lb[i].view(1, -1))
                         ids.append(y_lb[i].view(1, -1))
 
-                    # 无标签集使用伪标签
+                    #Pseudo-labeling on the unlabeled set
                     for i in range(num_ulb):
                         feats.append(c_l_ulb_w[i].view(1, -1))
                         feats.append(c_v_ulb_w[i].view(1, -1))
@@ -518,13 +499,13 @@ class S2_VER:
                 else:
                     decouple_loss = torch.zeros(1, device=logits_x_lb.device, dtype=logits_x_lb.dtype)
 
-                # ===== λ_u ramp-up：前期降低无监督权重 =====
+                # λ_u ramp-up
                 ulb_scale = min(1.0, float(self.it) / float(ulb_rampup_iters))
                 lambda_u_now = self.lambda_u * ulb_scale
 
                 total_loss = sup_loss + lambda_u_now * unsup_loss + decouple_loss
 
-            # 统计
+            #Counts
             sup_losses.update(sup_loss.detach().cpu())
             unsup_losses.update(unsup_loss.detach().cpu())
             decouple_losses.update(decouple_loss.detach().cpu())
@@ -533,7 +514,7 @@ class S2_VER:
 
             lr_last = self.optimizer.param_groups[0]['lr']
 
-            # 反传
+            #“Backprop
             if args.amp:
                 scaler.scale(total_loss).backward()
                 if (args.clip > 0):
@@ -556,7 +537,7 @@ class S2_VER:
 
             start_batch.record()
 
-        # 训练日志（本 epoch）
+        #Training logs
         pseudo_ratio_str = "N/A"
         if pseudo_true_ratios.count > 0:
             pseudo_ratio_str = f"{pseudo_true_ratios.avg:.4f}"
@@ -579,7 +560,7 @@ class S2_VER:
             )
         )
 
-        # 评估（含 Macro-F1 & 动态 top-k）
+        # evaluate
         eval_dict = self.evaluate(args=args)
         best_eval_acc = max(best_eval_acc, eval_dict['eval/top-1-acc'])
 
@@ -622,13 +603,12 @@ class S2_VER:
         y_pred = []
         y_logits = []
 
-        # 动态 top-k：二分类时 k=1，3 类时 k=2，>=6 类时 k=5
         num_classes = int(self.num_classes)
         k = min(5, max(1, num_classes - 1))
 
         for _, x, text_input, y in eval_loader:
             x, y = x.cuda(args.gpu), y.cuda(args.gpu)
-            # text_input 已是 list[str]
+
             text_input = self.tokenizer(text_input, return_tensors='pt', padding=True, truncation=True)
             text_input = {key: value.cuda(args.gpu) for key, value in text_input.items()}
             num_batch = x.shape[0]
@@ -641,11 +621,11 @@ class S2_VER:
             y_logits.extend(torch.softmax(logits, dim=-1).cpu().detach().tolist())
             total_loss += loss.cpu().detach() * num_batch
 
-        # 指标
+        #“Metrics
         top1 = accuracy_score(y_true, y_pred)
         topk = top_k_accuracy_score(y_true, y_logits, k=k) if k > 1 else top1
 
-        # Macro-F1（类不均衡下更稳健）
+        # Macro-F1
         macro_f1 = f1_score(y_true, y_pred, average='macro', zero_division=0)
 
         self.ema.restore()
@@ -777,11 +757,7 @@ class S2_VER:
         self._motivation_header_written = True
 
     def _should_use_teacher(self, epoch: int) -> bool:
-        """
-        判断当前迭代是否使用 EMA teacher：
-        - 需确保 ema 已初始化；
-        - 允许设置若干 warmup epoch，在此之前直接使用学生伪标签。
-        """
+
         if not self._ema_initialized:
             return False
         return epoch >= self.teacher_warmup_epochs

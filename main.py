@@ -1,19 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Improved training launcher for S2_VER/CoMatch.
 
-Key changes:
-- Config file support (-c) actually applied.
-- Reproducible seeding with optional deterministic mode; TF32 toggle.
-- Warmup configurable via --warmup_ratio/--warmup_steps.
-- Net name comes from --net (default unified to 'ResNet50').
-- Safer cuDNN flags (determinism vs benchmark handled correctly).
-- Optional torch.compile acceleration (PyTorch 2+).
-- Best checkpoint saving to save_dir/save_name/best.pth.
-- Optional early stopping (--patience).
-- Cleaner logging and device setup.
-- Save args.json for reproducibility.
-"""
 
 import os
 import random
@@ -36,7 +22,6 @@ import json
 # -------------------------------
 
 def setup_seed(seed: int, deterministic: bool = True):
-    """Set random seeds for reproducibility."""
     assert seed is not None
     random.seed(seed)
     np.random.seed(seed)
@@ -59,14 +44,10 @@ def get_warmup_steps(total_steps: int, warmup_ratio: float, warmup_steps=None) -
 # -------------------------------
 
 def main(args):
-    """
-    For single/DP training. (DDP not enabled in this file.)
-    """
-    # Overwrite args from config file if provided
     if getattr(args, 'c', None):
         args = over_write_args_from_file(args, args.c)
 
-    # Save path checks (check first, then create)
+    # Save path checks
     save_path = os.path.join(args.save_dir, args.save_name)
     if os.path.exists(save_path) and not args.overwrite and not args.resume:
         raise Exception(f'already existing model: {save_path}. Use --overwrite to overwrite.')
@@ -96,15 +77,9 @@ def main(args):
 
 
 def main_worker(gpu, args):
-    """Main worker executed on a single GPU."""
     args.gpu = gpu
-
-    # -----------------
-    # Repro & CUDA flags
-    # -----------------
     setup_seed(args.seed, deterministic=args.deterministic)
 
-    # Optional TF32 for Ampere+ accelerators
     if hasattr(torch.backends.cuda, 'matmul'):
         torch.backends.cuda.matmul.allow_tf32 = bool(args.tf32)
     try:
@@ -174,7 +149,6 @@ def main_worker(gpu, args):
         # Fallback to DataParallel over all visible devices
         model.model = torch.nn.DataParallel(model.model).cuda()
 
-    # Optional PyTorch 2 compile
     if args.torch_compile and hasattr(torch, 'compile'):
         try:
             compile_mode = 'max-autotune' if hasattr(torch._dynamo, 'config') else 'default'
@@ -186,7 +160,6 @@ def main_worker(gpu, args):
     logger.info(f"model_arch: {model}")
     logger.info(f"Arguments: {vars(args)}")
 
-    # cuDNN autotune only if not deterministic
     cudnn.benchmark = not args.deterministic
 
     # -----------------
@@ -268,7 +241,6 @@ def main_worker(gpu, args):
     epochs_no_improve = 0
 
     for epoch in range(args.epoch):
-        # 说明：S2_VER.train() 内部自带每个 epoch 的评估与 best 模型保存（model_best.pth）
         eval_acc = trainer(args, epoch, best_eval_acc, logger=logger)
 
         if eval_acc > best_eval_acc + 1e-9:
@@ -286,7 +258,6 @@ def main_worker(gpu, args):
         else:
             epochs_no_improve += 1
 
-        # Early stopping if patience reached
         if args.patience > 0 and epochs_no_improve >= args.patience:
             logger.info(f"Early stopping triggered after {args.patience} epochs without improvement.")
             break
@@ -370,7 +341,7 @@ if __name__ == "__main__":
     parser.add_argument('--tf32', type=str2bool, default=True, help='allow TF32 on Ampere+ GPUs')
     parser.add_argument('--deterministic', type=str2bool, default=False)  # faster by default
 
-    # Backbone (unified default capitalized)
+    # Backbone
     parser.add_argument('--net', type=str, default='ResNet50')
     parser.add_argument('--net_from_name', type=str2bool, default=False)
     parser.add_argument('--depth', type=int, default=28)
@@ -389,8 +360,6 @@ if __name__ == "__main__":
 
     # Early stopping
     parser.add_argument('--patience', type=int, default=0, help='stop if no improvement for this many epochs (0=off)')
-
-    # (Optional) control eval frequency in future; S2_VER currently evaluates every epoch.
     parser.add_argument('--eval_every', type=int, default=1, help='evaluate every N epochs (currently unused)')
 
     # GPU & seed

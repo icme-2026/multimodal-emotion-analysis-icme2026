@@ -14,60 +14,7 @@ import copy
 
 # from custom_writer import CustomWriter
 
-'''
-We reimplement SGD to keep cosistent with the origin paper. But we actually do not use it. You can use it if you want.
-'''
-
-
 class SGD(Optimizer):
-    r"""Implements stochastic gradient descent (optionally with momentum).
-
-    Nesterov momentum is based on the formula from
-    `On the importance of initialization and momentum in deep learning`__.
-
-    Args:
-        params (iterable): iterable of parameters to optimize or dicts defining
-            parameter groups
-        lr (float): learning rate
-        momentum (float, optional): momentum factor (default: 0)
-        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
-        dampening (float, optional): dampening for momentum (default: 0)
-        nesterov (bool, optional): enables Nesterov momentum (default: False)
-
-    Example:
-        >>> optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
-        >>> optimizer.zero_grad()
-        >>> loss_fn(model(input), target).backward()
-        >>> optimizer.step()
-
-    __ http://www.cs.toronto.edu/%7Ehinton/absps/momentum.pdf
-
-    .. note::
-        The implementation of SGD with Momentum/Nesterov subtly differs from
-        Sutskever et. al. and implementations in some other frameworks.
-
-        Considering the specific case of Momentum, the update can be written as
-
-        .. math::
-            \begin{aligned}
-                v_{t+1} & = \mu * v_{t} + g_{t+1}, \\
-                p_{t+1} & = p_{t} - \text{lr} * v_{t+1},
-            \end{aligned}
-
-        where :math:`p`, :math:`g`, :math:`v` and :math:`\mu` denote the
-        parameters, gradient, velocity, and momentum respectively.
-
-        This is in contrast to Sutskever et. al. and
-        other frameworks which employ an update of the form
-
-        .. math::
-            \begin{aligned}
-                v_{t+1} & = \mu * v_{t} + \text{lr} * g_{t+1}, \\
-                p_{t+1} & = p_{t} - v_{t+1}.
-            \end{aligned}
-
-        The Nesterov version is analogously modified.
-    """
 
     def __init__(self, params, lr=required, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False):
@@ -91,12 +38,7 @@ class SGD(Optimizer):
 
     @torch.no_grad()
     def step(self, closure=None):
-        """Performs a single optimization step.
 
-        Arguments:
-            closure (callable, optional): A closure that reevaluates the model
-                and returns the loss.
-        """
         loss = None
         if closure is not None:
             with torch.enable_grad():
@@ -147,12 +89,7 @@ class TBLog:
         #     self.writer = CustomWriter(os.path.join(self.tb_dir, file_name))
 
     def update(self, tb_dict, it, suffix=None, mode="train"):
-        """
-        Args
-            tb_dict: contains scalar values for updating tensorboard
-            it: contains information of iteration (int).
-            suffix: If not None, the update key has the suffix.
-        """
+
         if suffix is None:
             suffix = ''
         if self.writer_type == "tensorboard":
@@ -169,9 +106,7 @@ class TBLog:
 
 
 class AverageMeter(object):
-    """
-    refer: https://github.com/pytorch/examples/blob/master/imagenet/main.py
-    """
+
 
     def __init__(self):
         self.reset()
@@ -200,11 +135,6 @@ def wd_loss(net):
 
 
 def get_optimizer(net, optim_name='SGD', lr=0.1, momentum=0.9, weight_decay=0, nesterov=True, bn_wd_skip=True):
-    '''
-    return optimizer (name) in torch.optim.
-    If bn_wd_skip, the optimizer does not apply
-    weight decay regularization on parameters in batch normalization.
-    '''
 
     decay = []
     no_decay = []
@@ -230,16 +160,8 @@ def get_cosine_schedule_with_warmup(optimizer,
                                     num_cycles=7. / 16.,
                                     num_warmup_steps=0,
                                     last_epoch=-1):
-    '''
-    Get cosine scheduler (LambdaLR).
-    if warmup is needed, set num_warmup_steps (int) > 0.
-    '''
 
     def _lr_lambda(current_step):
-        '''
-        _lr_lambda returns a multiplicative factor given an interger parameter epochs.
-        Decaying criteria: last_epoch
-        '''
 
         if current_step < num_warmup_steps:
             _lr = float(current_step) / float(max(1, num_warmup_steps))
@@ -268,16 +190,7 @@ def get_imagenet_schedule(optimizer, num_training_steps, num_labels, batch_size)
 
 
 def accuracy(output, target, topk=(1,)):
-    """
-    Computes the accuracy over the k top predictions for the specified values of k
 
-    Args
-        output: logits or probs (num of batch, num of classes)
-        target: (num of batch, 1) or (num of batch, )
-        topk: list of returned k
-
-    refer: https://github.com/pytorch/examples/blob/master/imagenet/main.py
-    """
 
     with torch.no_grad():
         maxk = max(topk)  # get k in top-k
@@ -300,14 +213,7 @@ def accuracy(output, target, topk=(1,)):
 
 
 def ce_loss(logits, targets, use_hard_labels=True, reduction='none'):
-    """
-    wrapper for cross entropy loss in pytorch.
 
-    Args
-        logits: logit values, shape=[Batch size, # of classes]
-        targets: integer or vector, shape=[Batch size] or [Batch size, # of classes]
-        use_hard_labels: If True, targets have [Batch size] shape with int values. If False, the target is vector (default True)
-    """
     if use_hard_labels:
         log_pred = F.log_softmax(logits, dim=-1)
         return F.nll_loss(log_pred, targets, reduction=reduction)
@@ -380,43 +286,7 @@ class LabelSmoothingCrossEntropy(nn.Module):
             return loss.sum()
         return loss
 
-
-# class EMA:
-#    """
-#    Implementation from https://fyubang.com/2019/06/01/ema/
-#    """
-#
-#    def __init__(self, model, decay):
-#        self.model = model
-#        self.decay = decay
-#        self.shadow = {}
-#        self.backup = {}
-#
-#    def load(self, model):
-#        self.model.load_state_dict(model.state_dict())
-#
-#    def register(self):
-#        self.shadow = deepcopy(self.model.state_dict())
-#
-#
-#    def update(self):
-#        for name, param in self.model.state_dict().items():
-#            assert name in self.shadow
-#            new_avg = (1.0 - self.decay) * param + self.decay * self.shadow[name]
-#            self.shadow[name] = new_avg
-#
-#    def apply_shadow(self):
-#        self.backup = deepcopy(self.model.state_dict())
-#        self.model.load_state_dict(self.shadow)
-#
-#    def restore(self):
-#        self.model.load_state_dict(self.backup)
-#        self.backup = {}
-
 class EMA:
-    """
-    Implementation from https://fyubang.com/2019/06/01/ema/
-    """
 
     def __init__(self, model, decay):
         self.model = model
@@ -457,9 +327,7 @@ class EMA:
 
 class Bn_Controller:
     def __init__(self):
-        """
-        freeze_bn and unfreeze_bn must appear in pairs
-        """
+
         self.backup = {}
 
     def freeze_bn(self, model):

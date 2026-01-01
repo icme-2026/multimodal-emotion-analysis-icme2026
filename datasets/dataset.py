@@ -11,12 +11,7 @@ import os
 
 
 def _ensure_pil(img_obj, base_dir_candidates=None):
-    """
-    img_obj 可能是：
-      - 路径字符串（相对/绝对）
-      - numpy.ndarray（H,W,3 或 H,W）
-      - PIL.Image
-    """
+
     if isinstance(img_obj, Image.Image):
         return img_obj.convert("RGB")
 
@@ -27,26 +22,23 @@ def _ensure_pil(img_obj, base_dir_candidates=None):
 
     if isinstance(img_obj, (str, np.str_)):
         path = img_obj
-        # 尝试原路径
+
         if os.path.isfile(path):
             return Image.open(path).convert("RGB")
-        # 尝试加上候选 base_dir
+
         if base_dir_candidates:
             for base in base_dir_candidates:
                 cand = os.path.join(base, path)
                 if os.path.isfile(cand):
                     return Image.open(cand).convert("RGB")
-        # 实在找不到就抛
+
         raise FileNotFoundError(f"Image path not found: {img_obj}")
 
-    # 兜底
+
     raise TypeError(f"Unsupported image type: {type(img_obj)}")
 
 
 class BasicDataset(Dataset):
-    """
-    兼容弱/强增广，返回 (idx, img_w, [img_s0, img_s1], text, target)
-    """
 
     def __init__(self,
                  alg,
@@ -62,16 +54,16 @@ class BasicDataset(Dataset):
                  *args, **kwargs):
         super(BasicDataset, self).__init__()
         self.alg = alg
-        self.img = img            # dtype=object: 路径(str) 或 ndarray
-        self.text = text          # dtype=object: 文本(str)
-        self.targets = targets    # None 或 int labels
+        self.img = img
+        self.text = text
+        self.targets = targets
 
         self.num_classes = num_classes
         self.is_ulb = is_ulb
         self.onehot = onehot
 
         self.transform = transform
-        self.data_root = data_root  # 供相对路径补全
+        self.data_root = data_root
 
         if self.is_ulb:
             if strong_transform is None:
@@ -92,7 +84,7 @@ class BasicDataset(Dataset):
 
         # 2) image / text
         img_obj = self.img[idx]
-        text = self.text[idx]  # 已经是 str（来自 data_utils）
+        text = self.text[idx]  # from data_utils
 
         img_pil = _ensure_pil(
             img_obj,
@@ -108,7 +100,6 @@ class BasicDataset(Dataset):
         if not self.is_ulb:
             return idx, img_w, text, target
 
-        # 无标注分支：按算法要求返回
         if self.alg in ['comatch', 'main']:
             img_s0 = self.strong_transform(img_pil)
             img_s1 = self.strong_transform(img_pil)
@@ -127,7 +118,7 @@ class BasicDataset(Dataset):
             img_s2 = self.strong_transform(img_pil)
             return idx, img_w, img_s1, img_s2, img_s1_rot, rotate_v_list.index(rotate_v1), text, target
         else:
-            # 默认与 comatch 对齐（两张强增广）
+
             img_s0 = self.strong_transform(img_pil)
             img_s1 = self.strong_transform(img_pil)
             return idx, img_w, img_s0, img_s1, text, target

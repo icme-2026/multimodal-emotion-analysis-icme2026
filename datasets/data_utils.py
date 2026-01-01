@@ -13,9 +13,7 @@ from datasets.DistributedProxySampler import DistributedProxySampler
 def split_ssl_data(args, img, text, img_label, text_label, label,
                    num_labels, num_classes, index=None, include_lb_to_ulb=True):
     """
-    划分有标注 / 无标注数据。
-    关键点：保留图像为“路径字符串”或“ndarray”，不要把 ndarray 转成 str；
-          文本统一为字符串；标签统一为 int。
+    Separate labeled and unlabeled data
     """
 
     def _as_str_list(seq):
@@ -49,7 +47,6 @@ def split_ssl_data(args, img, text, img_label, text_label, label,
         return _np.array(res, dtype=int)
 
     def _as_img_list(seq):
-        # 路径字符串保留为 str，ndarray 保留为 ndarray
         out = []
         for p in seq:
             if isinstance(p, (str, np.str_)):
@@ -83,7 +80,7 @@ def sample_labeled_data(args, img, text, label,
                         num_labels, num_classes,
                         dataset, index=None, name=None):
     """
-    类别均衡抽取有标注样本
+    Sample labeled data with class balance.
     """
     assert num_labels % num_classes == 0
     if index is not None:
@@ -145,7 +142,7 @@ def get_data_loader(dset,
                     generator=None,
                     drop_last=True):
     """
-    包装 DataLoader。默认使用 RandomSampler（若指定）。
+    Package the DataLoader
     """
     assert batch_size is not None
 

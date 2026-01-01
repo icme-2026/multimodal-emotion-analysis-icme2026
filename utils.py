@@ -16,8 +16,7 @@ def over_write_args_from_file(args, yml):
 
 
 def setattr_cls_from_kwargs(cls, kwargs):
-    # if default values are in the cls,
-    # overlap the value by kwargs
+
     for key in kwargs.keys():
         if hasattr(cls, key):
             print(f"{key} in {cls} is overlapped by kwargs: {getattr(cls, key)} -> {kwargs[key]}")
@@ -38,13 +37,7 @@ def test_setattr_cls_from_kwargs():
 
 
 def net_builder(net_name, from_name: bool, net_conf=None, is_remix=False, dim=0, proj=False, is_distribution=False):
-    """
-    return **class** of backbone network (not instance).
-    Args
-        net_name: 'WideResNet' or network names in torchvision.models
-        from_name: If True, net_buidler takes models in torch.vision models. Then, net_conf is ignored.
-        net_conf: When from_name is False, net_conf is the configuration of backbone network (now, only WRN is supported).
-    """
+
     if from_name:
         import torchvision.models as models
         model_name_list = sorted(name for name in models.__dict__
